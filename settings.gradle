@@ -1,0 +1,2 @@
+rootProject.name='EasyCamera'
+include ':app'
