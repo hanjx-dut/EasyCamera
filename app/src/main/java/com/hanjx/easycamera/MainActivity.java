@@ -7,6 +7,7 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.view.PreviewView;
 
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -60,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
 
         takePicBtn.setOnClickListener(view -> {
             if (easyCamera != null) {
-                easyCamera.takePicture(Utils.createPhotoFile(outputFile), new EasyCamera.PictureTakeCallBack() {
+                easyCamera.takePicture(new EasyCamera.PictureFileCallBack() {
                     @Override
                     public void onImageSaved(@NonNull Uri uri) {
                         resultView.setVisibility(View.VISIBLE);

@@ -4,8 +4,8 @@ import android.content.Context;
 
 import java.io.File;
 
-class Utils {
-    static File getOutputFile(Context context) {
+public class Utils {
+    public static File getOutputFile(Context context) {
         Context appContext = context.getApplicationContext();
         File[] mediaDirs = context.getExternalMediaDirs();
         if (mediaDirs != null && mediaDirs.length > 0 && mediaDirs[0] != null) {
@@ -16,7 +16,7 @@ class Utils {
         return appContext.getFilesDir();
     }
 
-    static File createPhotoFile(File outputFile) {
+    public static File createPhotoFile(File outputFile) {
         return new File(outputFile, String.format("%s%s", System.currentTimeMillis(), ".png"));
     }
 }
