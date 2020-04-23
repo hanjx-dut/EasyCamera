@@ -7,7 +7,6 @@ import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.view.PreviewView;
 
-import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -15,7 +14,6 @@ import android.widget.ImageView;
 
 import com.blankj.utilcode.util.ToastUtils;
 import com.bumptech.glide.Glide;
-import com.hanjx.easycamera.lib.EasyCamera;
 
 import java.io.File;
 

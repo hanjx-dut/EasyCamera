@@ -1,4 +1,4 @@
-package com.hanjx.easycamera.lib;
+package com.hanjx.easycamera;
 
 import android.Manifest;
 import android.graphics.drawable.Drawable;
