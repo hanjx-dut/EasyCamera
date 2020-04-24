@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.view.PreviewView;
 
@@ -37,9 +38,9 @@ public class MainActivity extends AppCompatActivity {
         resultView = findViewById(R.id.result_img);
 
         previewView.post(() -> new EasyCamera.Builder(MainActivity.this, previewView)
-                .chooseCamera(CameraSelector.LENS_FACING_BACK)
+                .setCamera(CameraSelector.LENS_FACING_BACK)
                 .setRatio(AspectRatio.RATIO_16_9)
-                .setCaptureMode(EasyCamera.MODE_QUALITY_FIRST)
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .requestPermissionAndBuild(new EasyCamera.BuildCallBack() {
                     @Override
                     public void onBuildSuccess(EasyCamera easyCamera) {
@@ -59,9 +60,9 @@ public class MainActivity extends AppCompatActivity {
 
         takePicBtn.setOnClickListener(view -> {
             if (easyCamera != null) {
-                easyCamera.takePicture(new EasyCamera.PictureFileCallBack() {
+                easyCamera.takePicture(new EasyCamera.FileCallBack() {
                     @Override
-                    public void onImageSaved(@NonNull Uri uri) {
+                    public void onImageFileSaved(@NonNull Uri uri) {
                         resultView.setVisibility(View.VISIBLE);
                         Glide.with(resultView)
                                 .load(uri)

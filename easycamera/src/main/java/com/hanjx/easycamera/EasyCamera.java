@@ -4,18 +4,22 @@ import android.Manifest;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.util.DisplayMetrics;
+import android.view.OrientationEventListener;
+import android.view.Surface;
 import android.widget.ImageView;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCaptureException;
 import androidx.camera.core.Preview;
+import androidx.camera.core.UseCase;
+import androidx.camera.core.VideoCapture;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -26,47 +30,72 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.target.Target;
 import com.bumptech.glide.request.transition.Transition;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.hanjx.easycamera.Utils;
 import com.tbruyelle.rxpermissions2.RxPermissions;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 
 public class EasyCamera {
-    public final static int MODE_SPEED_FIRST = ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY;
-    public final static int MODE_QUALITY_FIRST = ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY;
-    @IntDef({MODE_SPEED_FIRST, MODE_QUALITY_FIRST})
-    private @interface CaptureMode{}
 
+    // Camera 实例
     private Camera camera;
 
-    private PreviewView previewView;
-    private Preview preview;
-    private ImageCapture imageCapture;
-
+    // 摄像头 前置/后置
     private int lensFacing;
 
+    // 预览 view
+    private PreviewView previewView;
+
+    // UsesCase 实例
+    private Preview preview;
+    private ImageCapture imageCapture;
+    private ImageAnalysis imageAnalysis;
+    private VideoCapture videoCapture;
+    private List<UseCase> unknownUseCases;
+
+    // 默认输出目录
     private File outputFile;
 
-    public void takePicture(PictureFileCallBack callBack) {
+    private EasyCamera(Camera camera, PreviewView previewView, int lensFacing, UseCase... useCases) {
+        this.camera = camera;
+        this.previewView = previewView;
+        this.lensFacing = lensFacing;
+        this.outputFile = Utils.getOutputFile(previewView.getContext());
+        for (UseCase useCase : useCases) {
+            if (useCase instanceof Preview) {
+                this.preview = (Preview) useCase;
+            } else if (useCase instanceof ImageCapture) {
+                this.imageCapture = (ImageCapture) useCase;
+            } else if (useCase instanceof ImageAnalysis) {
+                this.imageAnalysis = (ImageAnalysis) useCase;
+            } else if (useCase instanceof VideoCapture) {
+                this.videoCapture = (VideoCapture) useCase;
+            } else {
+                unknownUseCases.add(useCase);
+            }
+        }
+    }
+
+    public void takePicture(FileCallBack callBack) {
         takePicture(Utils.createPhotoFile(outputFile), callBack);
     }
 
-    public void takePicture(PictureDrawableCallBack callBack) {
+    public void takePicture(DrawableCallBack callBack) {
         takePicture(false, Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL, callBack);
     }
 
-    public void takePicture(boolean persistent, PictureDrawableCallBack callBack) {
+    public void takePicture(boolean persistent, DrawableCallBack callBack) {
         takePicture(persistent, Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL, callBack);
     }
 
-    public void takePicture(int width, int height, PictureDrawableCallBack callBack) {
+    public void takePicture(int width, int height, DrawableCallBack callBack) {
         takePicture(false, width, height, callBack);
     }
 
-    public void takePicture(boolean persistent, int width, int height, PictureDrawableCallBack callBack) {
+    public void takePicture(boolean persistent, int width, int height, DrawableCallBack callBack) {
         if (imageCapture != null) {
             File file;
             try {
@@ -75,41 +104,46 @@ public class EasyCamera {
                 callBack.onError(e);
                 return;
             }
-            final File imageFile = file;
 
-            imageCapture.takePicture(createOutputOptions(imageFile), ContextCompat.getMainExecutor(previewView.getContext()),
+            final File imageFile = file;
+            final CustomTarget<Drawable> target = new CustomTarget<Drawable>(width, height) {
+                @Override
+                public void onResourceReady(@NonNull Drawable resource,
+                                            @Nullable Transition<? super Drawable> transition) {
+                    callBack.onDrawableReady(resource);
+                    onFinish();
+                }
+
+                @Override
+                public void onLoadCleared(@Nullable Drawable placeholder) { }
+
+                @Override
+                public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                    super.onLoadFailed(errorDrawable);
+                    callBack.onError(new Exception("Drawable load failed"));
+                    onFinish();
+                }
+
+                private void onFinish() {
+                    if (!persistent) {
+                        imageFile.delete();
+                    }
+                }
+            };
+
+            imageCapture.takePicture(createOutputOptions(imageFile),
+                    ContextCompat.getMainExecutor(previewView.getContext()),
                     new ImageCapture.OnImageSavedCallback() {
                         @Override
-                        public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                            Uri resultUri = outputFileResults.getSavedUri();
-                            if (resultUri == null) resultUri = Uri.fromFile(imageFile);
+                        public void onImageSaved(@NonNull ImageCapture.OutputFileResults results) {
                             Glide.with(previewView.getContext())
-                                    .load(resultUri)
-                                    .into(new CustomTarget<Drawable>(width, height) {
-                                        @Override
-                                        public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
-                                            callBack.onDrawableReady(resource);
-                                            if (!persistent) {
-                                                imageFile.delete();
-                                            }
-                                        }
-
-                                        @Override
-                                        public void onLoadCleared(@Nullable Drawable placeholder) { }
-
-                                        @Override
-                                        public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                                            super.onLoadFailed(errorDrawable);
-                                            callBack.onError(new Exception("Drawable load failed"));
-                                            if (!persistent) {
-                                                imageFile.delete();
-                                            }
-                                        }
-                                    });
+                                    .load(Uri.fromFile(imageFile))
+                                    .into(target);
                         }
 
                         @Override
                         public void onError(@NonNull ImageCaptureException exception) {
+                            callBack.onError(exception);
                             if (!persistent) {
                                 imageFile.delete();
                             }
@@ -118,14 +152,14 @@ public class EasyCamera {
         }
     }
 
-    public void takePicture(File outputFile, @NonNull PictureFileCallBack callBack) {
+    public void takePicture(File outputFile, @NonNull FileCallBack callBack) {
         if (imageCapture != null) {
-            imageCapture.takePicture(createOutputOptions(outputFile), ContextCompat.getMainExecutor(previewView.getContext()),
+            imageCapture.takePicture(createOutputOptions(outputFile),
+                    ContextCompat.getMainExecutor(previewView.getContext()),
                     new ImageCapture.OnImageSavedCallback() {
                         @Override
-                        public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                            Uri resultUri = outputFileResults.getSavedUri();
-                            callBack.onImageSaved(resultUri == null ? Uri.fromFile(outputFile) : resultUri);
+                        public void onImageSaved(@NonNull ImageCapture.OutputFileResults results) {
+                            callBack.onImageFileSaved(Uri.fromFile(outputFile));
                         }
 
                         @Override
@@ -145,14 +179,13 @@ public class EasyCamera {
             return;
         }
         final File imageFile = file;
-        imageCapture.takePicture(createOutputOptions(imageFile), ContextCompat.getMainExecutor(previewView.getContext()),
+        imageCapture.takePicture(createOutputOptions(imageFile),
+                ContextCompat.getMainExecutor(previewView.getContext()),
                 new ImageCapture.OnImageSavedCallback() {
                     @Override
-                    public void onImageSaved(@NonNull ImageCapture.OutputFileResults outputFileResults) {
-                        Uri resultUri = outputFileResults.getSavedUri();
-                        if (resultUri == null) resultUri = Uri.fromFile(imageFile);
+                    public void onImageSaved(@NonNull ImageCapture.OutputFileResults results) {
                         Glide.with(imageView)
-                                .load(resultUri)
+                                .load(Uri.fromFile(imageFile))
                                 .into(imageView);
                     }
 
@@ -181,19 +214,23 @@ public class EasyCamera {
         private LifecycleOwner lifecycleOwner;
         private PreviewView previewView;
 
-        private int ratio = AspectRatio.RATIO_16_9;
+        private int ratio;
         private boolean autoRatio = true;
+        private int rotation;
 
-        private int cameraOrientation = CameraSelector.LENS_FACING_BACK;
-        private int captureMode = MODE_SPEED_FIRST;
+        private Preview preview;
+        private ImageCapture imageCapture;
+
+        private int lensFacing = CameraSelector.LENS_FACING_BACK;
+        private int captureMode = ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY;
 
         public Builder(LifecycleOwner lifecycleOwner, PreviewView previewView) {
             this.lifecycleOwner = lifecycleOwner;
             this.previewView = previewView;
         }
 
-        public Builder chooseCamera(@CameraSelector.LensFacing int orientation) {
-            this.cameraOrientation = orientation;
+        public Builder setCamera(@CameraSelector.LensFacing int lensFacing) {
+            this.lensFacing = lensFacing;
             return this;
         }
 
@@ -203,7 +240,7 @@ public class EasyCamera {
             return this;
         }
 
-        public Builder setCaptureMode(@CaptureMode int captureMode) {
+        public Builder setCaptureMode(@ImageCapture.CaptureMode int captureMode) {
             this.captureMode = captureMode;
             return this;
         }
@@ -226,7 +263,7 @@ public class EasyCamera {
             }
 
             CameraSelector cameraSelector =
-                    new CameraSelector.Builder().requireLensFacing(cameraOrientation).build();
+                    new CameraSelector.Builder().requireLensFacing(lensFacing).build();
             ListenableFuture<ProcessCameraProvider> providerFuture =
                     ProcessCameraProvider.getInstance(previewView.getContext());
             providerFuture.addListener(() -> {
@@ -234,39 +271,24 @@ public class EasyCamera {
                     ProcessCameraProvider cameraProvider = providerFuture.get();
                     cameraProvider.unbindAll();
 
-                    int rotation = getPreviewViewRotation();
+                    rotation = previewView.getDisplay().getRotation();
 
-                    Preview preview = new Preview.Builder()
-                            .setTargetAspectRatio(ratio)
-                            .setTargetRotation(rotation)
-                            .build();
+                    initUseCase();
 
-                    ImageCapture capture = new ImageCapture.Builder()
-                            .setCaptureMode(captureMode)
-                            .setTargetAspectRatio(ratio)
-                            .setTargetRotation(rotation)
-                            .build();
+                    Camera camera = cameraProvider.bindToLifecycle(
+                            lifecycleOwner, cameraSelector, preview, imageCapture);
 
-                    Camera camera = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, preview, capture);
-                    preview.setSurfaceProvider(previewView.createSurfaceProvider(camera.getCameraInfo()));
+                    preview.setSurfaceProvider(
+                            previewView.createSurfaceProvider(camera.getCameraInfo()));
 
-                    EasyCamera easyCamera = new EasyCamera();
-                    easyCamera.imageCapture = capture;
-                    easyCamera.lensFacing = cameraOrientation;
-                    easyCamera.previewView = previewView;
-                    easyCamera.camera = camera;
-                    easyCamera.preview = preview;
-                    easyCamera.outputFile = Utils.getOutputFile(previewView.getContext());
+                    EasyCamera easyCamera = new EasyCamera(
+                            camera, previewView, lensFacing, preview, imageCapture);
                     buildCallBack.onBuildSuccess(easyCamera);
                 } catch (ExecutionException | InterruptedException e) {
                     e.printStackTrace();
                     buildCallBack.onBuildFailed(e);
                 }
             }, ContextCompat.getMainExecutor(previewView.getContext()));
-        }
-
-        private int getPreviewViewRotation() {
-            return previewView.getDisplay().getRotation();
         }
 
         @AspectRatio.Ratio
@@ -277,10 +299,44 @@ public class EasyCamera {
             int height = displayMetrics.heightPixels;
 
             double previewRatio = ((double) Math.max(width, height)) / Math.min(width, height);
-            if (Math.abs(previewRatio - AspectRatio.RATIO_4_3) <= Math.abs(previewRatio - AspectRatio.RATIO_16_9)) {
+            if (Math.abs(previewRatio - AspectRatio.RATIO_4_3)
+                    <= Math.abs(previewRatio - AspectRatio.RATIO_16_9)) {
                 return AspectRatio.RATIO_4_3;
             }
             return AspectRatio.RATIO_16_9;
+        }
+
+        private void initUseCase() {
+            preview = new Preview.Builder()
+                    .setTargetAspectRatio(ratio)
+                    .setTargetRotation(rotation)
+                    .build();
+
+            imageCapture = new ImageCapture.Builder()
+                    .setCaptureMode(captureMode)
+                    .setTargetAspectRatio(ratio)
+                    .setTargetRotation(rotation)
+                    .build();
+
+            setOrientationListener();
+        }
+
+        private void setOrientationListener() {
+            new OrientationEventListener(previewView.getContext()) {
+                @Override
+                public void onOrientationChanged(int orientation) {
+                    if (orientation >= 45 && orientation < 135) {
+                        rotation = Surface.ROTATION_270;
+                    } else if (orientation >= 135 && orientation < 225) {
+                        rotation = Surface.ROTATION_180;
+                    } else if (orientation >= 225 && orientation < 315) {
+                        rotation = Surface.ROTATION_90;
+                    } else {
+                        rotation = Surface.ROTATION_0;
+                    }
+                    imageCapture.setTargetRotation(rotation);
+                }
+            }.enable();
         }
     }
 
@@ -290,12 +346,12 @@ public class EasyCamera {
         void onBuildFailed(Exception e);
     }
 
-    public interface PictureFileCallBack {
-        void onImageSaved(@NonNull Uri uri);
+    public interface FileCallBack {
+        void onImageFileSaved(@NonNull Uri uri);
         void onError(@NonNull ImageCaptureException exception);
     }
 
-    public interface PictureDrawableCallBack {
+    public interface DrawableCallBack {
         void onDrawableReady(@NonNull Drawable drawable);
         void onError(@NonNull Exception exception);
     }

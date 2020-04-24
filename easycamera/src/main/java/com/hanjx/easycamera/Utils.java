@@ -8,16 +8,14 @@ import java.io.File;
 
 public class Utils {
     public static String getApplicationName(Context context) {
-        PackageManager packageManager = null;
-        ApplicationInfo applicationInfo = null;
         try {
-            packageManager = context.getApplicationContext().getPackageManager();
-            applicationInfo = packageManager.getApplicationInfo(context.getPackageName(), 0);
+            PackageManager packageManager = context.getApplicationContext().getPackageManager();
+            ApplicationInfo applicationInfo = packageManager.getApplicationInfo(context.getPackageName(), 0);
+            return packageManager.getApplicationLabel(applicationInfo).toString();
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
             return "EasyCamera";
         }
-        return (String) packageManager.getApplicationLabel(applicationInfo);
     }
 
     public static File getOutputFile(Context context) {
@@ -32,6 +30,6 @@ public class Utils {
     }
 
     public static File createPhotoFile(File outputFile) {
-        return new File(outputFile, String.format("%s%s", System.currentTimeMillis(), ".png"));
+        return new File(outputFile, String.format("%s%s", System.currentTimeMillis(), ".jpeg"));
     }
 }
