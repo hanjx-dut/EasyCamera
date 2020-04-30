@@ -24,6 +24,7 @@ public class MainActivity extends AppCompatActivity {
     private PreviewView previewView;
     private ImageView resultView;
     private View takePicBtn;
+    private View switchCameraImg;
 
     EasyCamera easyCamera;
 
@@ -31,21 +32,42 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        outputFile = Utils.getOutputFile(this);
+        outputFile = FileUtils.getOutputFile(this);
 
         previewView = findViewById(R.id.preview_view);
         takePicBtn = findViewById(R.id.take_photo_img);
         resultView = findViewById(R.id.result_img);
+        switchCameraImg = findViewById(R.id.switch_camera);
 
-        previewView.post(() -> new EasyCamera.Builder(MainActivity.this, previewView)
-                .setCamera(CameraSelector.LENS_FACING_BACK)
-                .setRatio(AspectRatio.RATIO_16_9)
+        easyCamera = new EasyCamera(MainActivity.this, previewView);
+        previewView.post(() -> configEasyCamera(easyCamera));
+
+        takePicBtn.setOnClickListener(view -> easyCamera.takePicture(new EasyCamera.FileCallBack() {
+            @Override
+            public void onImageFileSaved(@NonNull Uri uri) {
+                resultView.setVisibility(View.VISIBLE);
+                Glide.with(resultView)
+                        .load(uri)
+                        .into(resultView);
+            }
+
+            @Override
+            public void onError(@NonNull ImageCaptureException exception) {
+                exception.printStackTrace();
+            }
+        }));
+
+        resultView.setOnClickListener(v -> resultView.setVisibility(View.INVISIBLE));
+        switchCameraImg.setOnClickListener(v -> easyCamera.switchCamera());
+    }
+
+    private void configEasyCamera(EasyCamera easyCamera) {
+        easyCamera.setLensFacing(CameraSelector.LENS_FACING_BACK)
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                .requestPermissionAndBuild(new EasyCamera.BuildCallBack() {
+                .setRatio(AspectRatio.RATIO_4_3)
+                .build(new EasyCamera.BuildCallBack() {
                     @Override
-                    public void onBuildSuccess(EasyCamera easyCamera) {
-                        MainActivity.this.easyCamera = easyCamera;
-                    }
+                    public void onCameraReady() { }
 
                     @Override
                     public void onPermissionDenied() {
@@ -53,30 +75,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     @Override
-                    public void onBuildFailed(Exception e) {
-                        e.printStackTrace();
-                    }
-                }));
-
-        takePicBtn.setOnClickListener(view -> {
-            if (easyCamera != null) {
-                easyCamera.takePicture(new EasyCamera.FileCallBack() {
-                    @Override
-                    public void onImageFileSaved(@NonNull Uri uri) {
-                        resultView.setVisibility(View.VISIBLE);
-                        Glide.with(resultView)
-                                .load(uri)
-                                .into(resultView);
-                    }
-
-                    @Override
-                    public void onError(@NonNull ImageCaptureException exception) {
-                        exception.printStackTrace();
-                    }
+                    public void onBuildFailed(Exception e) { }
                 });
-            }
-        });
-
-        resultView.setOnClickListener(v -> resultView.setVisibility(View.INVISIBLE));
     }
 }

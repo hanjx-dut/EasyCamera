@@ -6,7 +6,7 @@ import android.content.pm.PackageManager;
 
 import java.io.File;
 
-public class Utils {
+public class FileUtils {
     public static String getApplicationName(Context context) {
         try {
             PackageManager packageManager = context.getApplicationContext().getPackageManager();
